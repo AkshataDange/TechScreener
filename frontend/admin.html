@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Portal - TechScreen AI</title>
+  <link rel="stylesheet" href="/static/admin-shared.css" />
+</head>
+<body>
+  <section id="login-page" class="page active">
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="badge">A</div>
+        <h1>Admin login</h1>
+        <p class="subtitle">Sign in to continue.</p>
+
+        <div class="stack">
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" placeholder="admin@example.com" />
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" placeholder="Enter your password" />
+          </div>
+
+          <button id="login-btn" class="primary-btn" type="button">Login</button>
+          <div id="login-message" class="message"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="portal-page" class="page">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-mark">N</div>
+          <h2>Admin</h2>
+          <p id="admin-summary">Admin</p>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link active" href="/admin">Dashboard</a>
+          <a class="sidebar-link" href="/admin/users-page">Users</a>
+          <a class="sidebar-link" href="/admin/assign">Assign</a>
+          <a class="sidebar-link" href="/admin/reports-page">Reports</a>
+        </nav>
+        <div class="sidebar-footer">
+          <button id="logout-btn" class="danger-btn" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="content-area">
+        <div class="page-shell">
+          <div class="hero">
+            <div class="eyebrow">Dashboard</div>
+            <h1>Admin panel</h1>
+          </div>
+
+          <div class="grid three">
+            <a class="card-link" href="/admin/assign">
+              <div class="card-kicker">Assign</div>
+              <h3>Assign Interview</h3>
+            </a>
+
+            <a class="card-link" href="/admin/users-page">
+              <div class="card-kicker">Users</div>
+              <h3>View Users</h3>
+            </a>
+
+            <a class="card-link" href="/admin/reports-page">
+              <div class="card-kicker">Reports</div>
+              <h3>View Reports</h3>
+            </a>
+          </div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <script src="/static/admin-common.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      async function handleLogin() {
+        AdminApp.clearMessage("login-message");
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        if (!email || !password) {
+          AdminApp.setMessage("login-message", "Please enter email and password.");
+          return;
+        }
+
+        const button = document.getElementById("login-btn");
+        button.disabled = true;
+        try {
+          await AdminApp.loginAdmin(email, password);
+          document.getElementById("login-page").classList.remove("active");
+          document.getElementById("portal-page").classList.add("active");
+          AdminApp.setAdminSummary();
+          AdminApp.bindLogout();
+        } catch (error) {
+          AdminApp.setMessage("login-message", error.message);
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      document.getElementById("login-btn").addEventListener("click", handleLogin);
+      document.getElementById("password").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          handleLogin();
+        }
+      });
+
+      AdminApp.requireAdmin({ loginPage: true });
+    });
+  </script>
+</body>
+</html>

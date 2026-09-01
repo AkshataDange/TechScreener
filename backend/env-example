@@ -1,0 +1,15 @@
+GROQ_API_KEY = 
+DATABASE_URL = e.g. postgresql://user:password@localhost:5432/techscreen
+
+WHISPERLIVE_WS_URL = e.g. ws://127.0.0.1:9090
+WHISPERLIVE_MODEL = base
+WHISPERLIVE_LANGUAGE = en
+WHISPERLIVE_USE_VAD = false
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER= e.g. abc@gmail.com
+SMTP_USE_TLS=true
+SMTP_FROM_EMAIL=e.g. abc@gmail.com
+SMTP_PASSWORD= 
+INTERVIEW_LOGIN_URL=e.g. http://localhost:8000/user

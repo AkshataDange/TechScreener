@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TechScreen AI — Reviewer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07080e;--surface:#0f1018;--surface2:#181924;--border:#1f2130;
+  --text:#e8e9f0;--muted:#6b6e82;--accent:#6c63ff;--blue:#3d9cf5;
+  --green:#22c55e;--warn:#fbbf24;--danger:#f87171;--radius:10px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding-bottom:60px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;border-bottom:1px solid var(--border);background:var(--surface)}
+.logo{font-size:16px;font-weight:700;letter-spacing:.5px}.logo span{color:var(--accent)}
+.nav-link{font-size:13px;color:var(--muted);border:1px solid var(--border);padding:5px 12px;border-radius:6px;text-decoration:none;transition:color .2s,border-color .2s}
+.nav-link:hover{color:var(--text);border-color:var(--accent)}
+
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - 61px)}
+
+/* ── sidebar ── */
+.sidebar{border-right:1px solid var(--border);padding:20px;overflow-y:auto;background:var(--surface)}
+.sidebar-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.session-item{padding:12px 14px;border-radius:8px;cursor:pointer;margin-bottom:6px;border:1px solid transparent;transition:all .2s}
+.session-item:hover{background:var(--surface2);border-color:var(--border)}
+.session-item.active{background:rgba(108,99,255,.1);border-color:rgba(108,99,255,.25)}
+.si-topic{font-size:14px;font-weight:600;margin-bottom:4px}
+.si-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.si-flag{color:var(--danger)}
+.empty-msg{font-size:13px;color:var(--muted);padding:20px 0;text-align:center}
+
+/* ── main panel ── */
+.main{padding:28px 32px;overflow-y:auto}
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;color:var(--muted);font-size:14px;gap:8px}
+.placeholder .icon{font-size:40px}
+
+/* ── summary bar ── */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.stat-val{font-size:26px;font-weight:700;margin-bottom:2px}
+.stat-lbl{font-size:11px;color:var(--muted)}
+.val-green{color:var(--green)}.val-warn{color:var(--warn)}.val-danger{color:var(--danger)}.val-blue{color:var(--blue)}
+
+/* ── section headings ── */
+.sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+
+/* ── answer accordion ── */
+.qa-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.qa-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none}
+.qa-header:hover{background:var(--surface2)}
+.qa-idx{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0}
+.qa-q{flex:1;font-size:14px;font-weight:500;line-height:1.4}
+.score-badge{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.badge-poor{background:rgba(248,113,113,.15);color:var(--danger)}
+.badge-fair{background:rgba(251,191,36,.1);color:var(--warn)}
+.badge-good{background:rgba(61,156,245,.1);color:var(--blue)}
+.badge-excellent{background:rgba(34,197,94,.1);color:var(--green)}
+.qa-body{padding:0 16px 16px;display:none}
+.qa-body.open{display:block}
+.transcript-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;margin-top:12px}
+.transcript-text{font-size:13px;color:var(--muted);font-style:italic;line-height:1.6;background:var(--surface2);padding:10px 12px;border-radius:7px}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{padding:3px 9px;border-radius:20px;font-size:12px;font-weight:500}
+.chip.hit{background:rgba(34,197,94,.12);color:var(--green)}
+.chip.miss{background:rgba(248,113,113,.1);color:var(--danger)}
+.tip-box{background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.18);border-radius:7px;padding:8px 12px;font-size:12px;color:var(--text);margin-top:8px}
+.chevron{font-size:12px;color:var(--muted);transition:transform .2s}
+.chevron.open{transform:rotate(90deg)}
+
+/* ── flag timeline ── */
+.flag-item{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.flag-item:last-child{border-bottom:none}
+.flag-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.flag-body{flex:1}
+.flag-type{font-size:13px;font-weight:600}
+.flag-detail{font-size:12px;color:var(--muted)}
+.flag-time{font-size:11px;color:var(--muted);white-space:nowrap}
+
+/* ── snapshot grid ── */
+.snap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.snap-thumb{border-radius:7px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:border-color .2s}
+.snap-thumb:hover{border-color:var(--accent)}
+.snap-thumb img{width:100%;display:block;object-fit:cover}
+.snap-time{font-size:10px;color:var(--muted);padding:4px 6px;background:var(--surface2)}
+
+/* ── image lightbox ── */
+.lightbox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center}
+.lightbox.show{display:flex}
+.lightbox img{max-width:90vw;max-height:88vh;border-radius:8px}
+.lightbox-close{position:absolute;top:18px;right:24px;font-size:28px;color:#fff;cursor:pointer;line-height:1}
+
+/* ── no data ── */
+.no-data{font-size:13px;color:var(--muted);padding:12px 0;font-style:italic}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">Tech<span>Screen</span> AI — <span style="color:var(--muted);font-weight:400">Reviewer</span></div>
+  <a href="/" class="nav-link">← Back to interview</a>
+</header>
+
+<div class="layout">
+
+  <!-- ── sidebar: session list ── -->
+  <div class="sidebar">
+    <div class="sidebar-title">Sessions</div>
+    <div id="session-list"><div class="empty-msg">Loading…</div></div>
+  </div>
+
+  <!-- ── main panel ── -->
+  <div class="main" id="main-panel">
+    <div class="placeholder">
+      <div class="icon">📋</div>
+      <div>Select a session from the left to review</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── lightbox ── -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lightbox-close" onclick="closeLightbox()">✕</div>
+  <img id="lightbox-img" src="" alt="Snapshot"/>
+</div>
+
+<script>
+const API = '';
+let activeSid = null;
+
+async function readJsonResponse(response) {
+  const raw = await response.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    if (!response.ok) {
+      throw new Error(raw.trim() || 'Request failed');
+    }
+    throw new Error('Server returned an invalid JSON response.');
+  }
+}
+
+// ── Load session list ──────────────────────────────────────────────────────
+async function loadSessions() {
+  const r    = await fetch(`${API}/review/sessions`);
+  const list = await readJsonResponse(r);
+  const el   = document.getElementById('session-list');
+
+  if (!list.length) { el.innerHTML = '<div class="empty-msg">No sessions yet.</div>'; return; }
+
+  el.innerHTML = list.map(s => {
+    const date  = new Date(s.created_at).toLocaleString();
+    const flags = s.flag_count > 0 ? `<span class="si-flag">⚠ ${s.flag_count} flags</span>` : '';
+    return `
+      <div class="session-item" onclick="loadReview('${s.id}')">
+        <div class="si-topic">${esc(s.topic)}</div>
+        <div class="si-meta">
+          <span>${s.answer_count}/${s.num_questions} answers</span>
+          ${flags}
+          <span>${date}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Load full review ────────────────────────────────────────────────────────
+async function loadReview(sid) {
+  activeSid = sid;
+
+  // Highlight active item
+  document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  const r    = await fetch(`${API}/review/${sid}`);
+  const data = await readJsonResponse(r);
+  renderReview(data);
+}
+
+async function deleteSession() {
+  if (!activeSid) return;
+  if (!confirm('Delete this report? This cannot be undone.')) return;
+  try {
+    await fetch(`${API}/review/${activeSid}`, { method: 'DELETE' });
+    activeSid = null;
+    document.getElementById('main-panel').innerHTML = `
+      <div class="placeholder">
+        <div class="icon">📋</div>
+        <div>Select a session from the left to review</div>
+      </div>`;
+    loadSessions();
+  } catch(e) {
+    alert('Failed to delete: ' + e.message);
+  }
+}
+
+function renderReview(data) {
+  const { session, answers, flags, snapshots, summary } = data;
+  const scoreClass = summary.avg_score >= 8 ? 'val-green' : summary.avg_score >= 6 ? 'val-blue' : summary.avg_score >= 4 ? 'val-warn' : 'val-danger';
+  const flagClass  = summary.flag_count > 0 ? 'val-danger' : 'val-green';
+
+  const html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h2 style="font-size:18px;font-weight:700">${esc(session.topic)}</h2>
+      <button id="delete-btn" onclick="deleteSession()" style="padding:6px 14px;background:rgba(248,113,113,.1);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">Delete report</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:20px">Session ${session.id} &nbsp;·&nbsp; ${new Date(session.created_at).toLocaleString()}</div>
+
+    <!-- summary stats -->
+    <div class="summary-grid">
+      <div class="stat-card"><div class="stat-val ${scoreClass}">${summary.avg_score}</div><div class="stat-lbl">Avg score / 10</div></div>
+      <div class="stat-card"><div class="stat-val val-blue">${summary.questions_answered}/${summary.total_questions}</div><div class="stat-lbl">Questions answered</div></div>
+      <div class="stat-card"><div class="stat-val ${flagClass}">${summary.flag_count}</div><div class="stat-lbl">Suspicious events</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--muted)">${summary.snapshot_count}</div><div class="stat-lbl">Snapshots taken</div></div>
+    </div>
+
+    <!-- answers -->
+    <div class="sec-title">Answers &amp; evaluations</div>
+    <div id="qa-list">
+      ${answers.length ? answers.map((a, i) => renderAnswer(a, i, session)).join('') : '<div class="no-data">No answers recorded for this session.</div>'}
+    </div>
+
+    <!-- flags -->
+    <div class="sec-title">Suspicious events</div>
+    <div>
+      ${flags.length ? flags.map(renderFlag).join('') : '<div class="no-data">No suspicious events recorded.</div>'}
+    </div>
+
+    <!-- snapshots -->
+    <div class="sec-title">Webcam snapshots</div>
+    <div class="snap-grid">
+      ${snapshots.length ? snapshots.map(renderSnap).join('') : '<div class="no-data">No snapshots taken.</div>'}
+    </div>
+  `;
+
+  document.getElementById('main-panel').innerHTML = html;
+}
+
+function renderAnswer(a, i, session) {
+  const ev = a.evaluation;
+  if (!ev) {
+    return `<div class="qa-item">
+      <div class="qa-header" onclick="toggleQA(${i})">
+        <div class="qa-idx" style="background:var(--surface2);color:var(--muted)">${i+1}</div>
+        <div class="qa-q">${esc(a.question_text)}</div>
+        <span class="chevron" id="chev-${i}">›</span>
+      </div>
+      <div class="qa-body" id="qa-body-${i}">
+        <div class="no-data">No answer submitted.</div>
+      </div>
+    </div>`;
+  }
+
+  const score = ev.score;
+  const cl    = score >= 5 ? 'excellent' : score >= 4 ? 'good' : score >= 3 ? 'fair' : 'poor';
+  const idxBg = cl === 'excellent' ? 'rgba(34,197,94,.15)' : cl === 'good' ? 'rgba(61,156,245,.12)' : cl === 'fair' ? 'rgba(251,191,36,.1)' : 'rgba(248,113,113,.12)';
+  const idxCl = cl === 'excellent' ? 'var(--green)' : cl === 'good' ? 'var(--blue)' : cl === 'fair' ? 'var(--warn)' : 'var(--danger)';
+
+  const correct  = (ev.correct||[]).map(c=>`<span class="chip hit">${esc(c)}</span>`).join('');
+  const missed   = (ev.missed||[]).map(m=>`<span class="chip miss">${esc(m)}</span>`).join('');
+  const concepts = (ev.key_concepts||[]).map(k=>`<span class="chip ${k.hit?'hit':'miss'}">${k.hit?'✓':'✗'} ${esc(k.term)}</span>`).join('');
+
+  return `
+    <div class="qa-item">
+      <div class="qa-header" onclick="toggleQA(${i})">
+        <div class="qa-idx" style="background:${idxBg};color:${idxCl}">${i+1}</div>
+        <div class="qa-q">${esc(a.question_text)}</div>
+        <span class="score-badge badge-${cl}">${score}/5</span>
+        <span class="chevron" id="chev-${i}">›</span>
+      </div>
+      <div class="qa-body" id="qa-body-${i}">
+        <div class="transcript-label">Candidate said</div>
+        <div class="transcript-text">${esc(a.transcript || '(No transcript)')}</div>
+        <div class="transcript-label">Assessment</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">${esc(ev.overview)}</div>
+        <div class="chip-row" style="margin-top:10px"><b style="font-size:11px;color:var(--muted);margin-right:4px">Covered:</b>${correct||'<span class="no-data">None</span>'}</div>
+        <div class="chip-row"><b style="font-size:11px;color:var(--muted);margin-right:4px">Missed:</b>${missed||'<span class="no-data">None</span>'}</div>
+        <div class="chip-row"><b style="font-size:11px;color:var(--muted);margin-right:4px">Concepts:</b>${concepts}</div>
+        <div class="tip-box">💡 ${esc(ev.improvement_tip)}</div>
+      </div>
+    </div>`;
+}
+
+
+function toggleQA(i) {
+  const body = document.getElementById(`qa-body-${i}`);
+  const chev = document.getElementById(`chev-${i}`);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+const FLAG_ICONS = {
+  tab_switch:   '🔀',
+  window_blur:  '👁',
+  copy:         '📋',
+  paste:        '📥',
+  devtools:     '🛠',
+};
+
+function renderFlag(f) {
+  const icon  = FLAG_ICONS[f.event_type] || '⚠';
+  const label = f.event_type.replace(/_/g, ' ');
+  const time  = new Date(f.flagged_at).toLocaleTimeString();
+  return `
+    <div class="flag-item">
+      <div class="flag-icon">${icon}</div>
+      <div class="flag-body">
+        <div class="flag-type">${esc(label)}</div>
+        <div class="flag-detail">${esc(f.detail||'')}</div>
+      </div>
+      <div class="flag-time">${time}</div>
+    </div>`;
+}
+
+function renderSnap(s) {
+  const time = new Date(s.taken_at).toLocaleTimeString();
+  return `
+    <div class="snap-thumb" onclick="openLightbox(${s.id})">
+      <img src="${API}/interview/snapshot/${s.id}" loading="lazy" alt="Snapshot at ${time}"/>
+      <div class="snap-time">${time}</div>
+    </div>`;
+}
+
+function openLightbox(snapId) {
+  document.getElementById('lightbox-img').src = `${API}/interview/snapshot/${snapId}`;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadSessions();
+setInterval(loadSessions, 30_000);  // auto-refresh every 30s
+</script>
+</body>
+</html>

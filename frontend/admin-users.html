@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>View Users - TechScreen Admin</title>
+  <link rel="stylesheet" href="/static/admin-shared.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark">N</div>
+        <h2>Admin</h2>
+        <p id="admin-summary">Admin</p>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="sidebar-link" href="/admin">Dashboard</a>
+        <a class="sidebar-link active" href="/admin/users-page">Users</a>
+        <a class="sidebar-link" href="/admin/assign">Assign</a>
+        <a class="sidebar-link" href="/admin/reports-page">Reports</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="danger-btn" type="button">Logout</button>
+      </div>
+    </aside>
+
+    <main class="content-area">
+      <div class="page-shell">
+        <section class="hero">
+          <div class="eyebrow">Users</div>
+          <h1>Users</h1>
+        </section>
+
+        <section class="panel">
+          <div id="user-list" class="list"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/admin-common.js"></script>
+  <script>
+    function formatStatus(status) {
+      const statusMap = {
+        'assigned': 'Assigned',
+        'in_progress': 'In Progress',
+        'completed': 'Completed',
+        'expired': 'Expired'
+      };
+      return statusMap[status] || status;
+    }
+
+    function getStatusClass(status) {
+      const classMap = {
+        'assigned': 'status-assigned',
+        'in_progress': 'status-progress',
+        'completed': 'status-completed',
+        'expired': 'status-expired'
+      };
+      return classMap[status] || '';
+    }
+
+    async function loadUsers() {
+      try {
+        const users = await AdminApp.fetchJson("/admin/users-with-assignments");
+        const wrap = document.getElementById("user-list");
+        if (!users || !users.length) {
+          wrap.innerHTML = '<div class="empty">No registered users yet.</div>';
+          return;
+        }
+
+        wrap.innerHTML = users.map((user) => `
+          <div class="item">
+            <div class="user-header">
+              <div>
+                <div class="chip">Candidate</div>
+                <div class="item-title">${AdminApp.escapeHtml(user.name)}</div>
+                <div class="item-meta">
+                  ${AdminApp.escapeHtml(user.email)}
+                </div>
+              </div>
+              <div class="item-actions">
+                <a class="primary-btn" href="/admin/assign?user_id=${encodeURIComponent(user.id)}">Assign Interview</a>
+              </div>
+            </div>
+            ${user.assignments && user.assignments.length > 0 ? `
+              <div class="assignments-list">
+                <div class="assignments-label">Assigned Interviews</div>
+                ${user.assignments.map(a => `
+                  <div class="assignment-item">
+                    <div class="assignment-info">
+                      <span class="assignment-topic">${AdminApp.escapeHtml(a.interview_title)}</span>
+                      <span class="assignment-meta">${a.target_question_count != null ? a.target_question_count + ' questions' : '8–16 questions'} · ${a.recommended_interview_time_minutes != null ? a.recommended_interview_time_minutes + ' min' : '30–60 min'}</span>
+                    </div>
+                    <span class="assignment-status ${getStatusClass(a.status)}">${formatStatus(a.status)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div class="no-assignments">No interviews assigned yet</div>
+            `}
+          </div>
+        `).join("");
+      } catch (error) {
+        document.getElementById("user-list").innerHTML = '<div class="empty">Failed to load users: ' + error.message + '</div>';
+      }
+    }
+
+    (async () => {
+      await AdminApp.requireAdmin();
+      await loadUsers();
+    })();
+  </script>
+</body>
+</html>

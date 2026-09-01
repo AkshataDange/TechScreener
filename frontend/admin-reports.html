@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>View Reports - TechScreen Admin</title>
+  <link rel="stylesheet" href="/static/admin-shared.css" />
+  <style>
+    .report-detail {
+      margin-top: 20px;
+    }
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .report-meta {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .question-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      background: #ffffff;
+    }
+    .question-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .question-num {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .question-score {
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+    .score-high { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+    .score-medium { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+    .score-low { background: rgba(209, 67, 67, 0.15); color: #dc2626; }
+    .question-text {
+      font-size: 15px;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: var(--panel-alt);
+      border-radius: 8px;
+    }
+    .answer-section {
+      margin-top: 12px;
+    }
+    .answer-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .answer-text {
+      font-size: 14px;
+      padding: 12px;
+      background: var(--panel-alt);
+      border-radius: 8px;
+      white-space: pre-wrap;
+    }
+    .flag-list {
+      margin-top: 12px;
+    }
+    .flag-item {
+      display: inline-block;
+      background: rgba(209, 67, 67, 0.1);
+      color: #dc2626;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    .back-btn {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Image Viewer Modal -->
+  <div id="image-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10000; justify-content: center; align-items: center; cursor: pointer;">
+    <img id="modal-image" style="max-width: 90%; max-height: 90%; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" />
+    <button id="modal-close" style="position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; color: white; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;">&times;</button>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark">N</div>
+        <h2>Admin</h2>
+        <p id="admin-summary">Admin</p>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="sidebar-link" href="/admin">Dashboard</a>
+        <a class="sidebar-link" href="/admin/users-page">Users</a>
+        <a class="sidebar-link" href="/admin/assign">Assign</a>
+        <a class="sidebar-link active" href="/admin/reports-page">Reports</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="danger-btn" type="button">Logout</button>
+      </div>
+    </aside>
+
+    <main class="content-area">
+      <div class="page-shell">
+        <section class="hero" id="reports-hero">
+          <div class="eyebrow">Reports</div>
+          <h1>Reports</h1>
+          <p id="report-filter-copy">All reports</p>
+        </section>
+
+        <section class="panel">
+          <div class="toolbar" id="reports-toolbar">
+            <select id="filter-field" onchange="updateFilterOptions()" style="width: auto;">
+              <option value="">Filter by...</option>
+              <option value="name">Name</option>
+              <option value="topic">Topic</option>
+              <option value="email">Email</option>
+            </select>
+            <select id="filter-value" onchange="applyFilters()" style="width: auto; display: none;">
+            </select>
+            <a class="ghost-btn" href="/admin/users-page">Users</a>
+            <a class="ghost-btn" id="clear-filter-btn" href="/admin/reports-page" style="display: none;">Clear Filter</a>
+            <button class="ghost-btn" onclick="deleteAllReports()" style="color: #dc2626; border-color: rgba(220,38,38,0.25); margin-left: auto;">Delete All Reports</button>
+          </div>
+          <div id="report-list" class="list"></div>
+          <div id="report-detail" class="report-detail" style="display: none;"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+<script src="/static/admin-common.js"></script>
+  <script>
+    let cachedReports = [];
+    let activeAssignmentId = "";
+
+    function getScoreClass(score) {
+      if (score >= 4) return 'score-high';
+      if (score >= 3) return 'score-medium';
+      return 'score-low';
+    }
+
+    function updateFilterOptions() {
+      const field = document.getElementById('filter-field').value;
+      const valueSelect = document.getElementById('filter-value');
+      
+      valueSelect.innerHTML = '';
+      
+      if (!field) {
+        valueSelect.style.display = 'none';
+        applyFilters();
+        return;
+      }
+      
+      const uniqueValues = new Set();
+      cachedReports.forEach(r => {
+        if (field === 'name') uniqueValues.add(r.user_name);
+        else if (field === 'email') uniqueValues.add(r.user_email);
+        else if (field === 'topic') uniqueValues.add(r.interview_title);
+      });
+      
+      const sorted = Array.from(uniqueValues).sort();
+      
+      if (field === 'topic') {
+        valueSelect.innerHTML = '<option value="">All Topics</option>' + 
+          sorted.map(v => `<option value="${v}">${v}</option>`).join('');
+      } else {
+        valueSelect.innerHTML = '<option value="">All</option>' + 
+          sorted.map(v => `<option value="${v}">${v}</option>`).join('');
+      }
+      
+      valueSelect.style.display = 'inline-flex';
+    }
+
+    function applyFilters() {
+      const filterField = document.getElementById('filter-field').value;
+      const filterValue = document.getElementById('filter-value').value;
+      const clearBtn = document.getElementById('clear-filter-btn');
+      const filterLabel = document.getElementById('report-filter-copy');
+      
+      let filterText = '';
+      if (filterField && filterValue) {
+        filterText = `${filterField}: ${filterValue}`;
+        clearBtn.style.display = 'inline-flex';
+      } else {
+        filterLabel.textContent = 'All reports';
+        clearBtn.style.display = 'none';
+      }
+      
+      if (filterText) filterLabel.textContent = filterText;
+      renderReports();
+    }
+
+    function renderReports() {
+      const filterField = document.getElementById('filter-field').value;
+      const filterValue = document.getElementById('filter-value').value;
+      const filterUserId = AdminApp.getQueryParam("user_id");
+      
+      let visibleReports = cachedReports;
+      if (filterUserId) {
+        visibleReports = visibleReports.filter((item) => item.user_id === filterUserId);
+      }
+      if (filterField && filterValue) {
+        visibleReports = visibleReports.filter((item) => {
+          if (filterField === 'name') return item.user_name === filterValue;
+          if (filterField === 'email') return item.user_email === filterValue;
+          if (filterField === 'topic') return item.interview_title === filterValue;
+          return false;
+        });
+      }
+      
+      const wrap = document.getElementById("report-list");
+
+      if (filterUserId && visibleReports.length) {
+        const first = visibleReports[0];
+        document.getElementById("report-filter-copy").textContent = `${first.user_name} (${first.user_email})`;
+      } else if (filterUserId) {
+        document.getElementById("report-filter-copy").textContent = "No reports";
+      }
+
+      if (!visibleReports.length) {
+        wrap.innerHTML = '<div class="empty">No completed reports yet.</div>';
+        return;
+      }
+
+      wrap.innerHTML = visibleReports.map((item) => `
+        <div class="item report-item" data-assignment-id="${item.assignment_id}">
+          <div class="chip">${AdminApp.escapeHtml(item.status)}</div>
+          <div class="item-title">${AdminApp.escapeHtml(item.interview_title || 'Interview')}</div>
+          <div class="item-meta">
+            ${AdminApp.escapeHtml(item.user_name)} (${AdminApp.escapeHtml(item.user_email)})<br />
+            Score: ${item.overall_score != null ? item.overall_score : 'N/A'}/5<br />
+            Answered: ${AdminApp.escapeHtml(item.questions_answered.toString())} / ${AdminApp.escapeHtml(item.total_questions.toString())}<br />
+            Flags: ${AdminApp.escapeHtml(item.flag_count.toString())}<br />
+            Completed: ${AdminApp.escapeHtml(AdminApp.formatDateTime(item.completed_at))}
+          </div>
+          <div style="margin-top: 12px;">
+            <button class="primary-btn view-report-btn" data-id="${item.assignment_id}">View Details</button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll('.view-report-btn').forEach(btn => {
+        btn.addEventListener('click', () => loadReportDetail(btn.dataset.id));
+      });
+    }
+
+    async function loadReportDetail(assignmentId) {
+      try {
+        activeAssignmentId = assignmentId;
+        const report = await AdminApp.fetchJson(`/admin/reports/${assignmentId}`);
+        const wrap = document.getElementById("report-detail");
+        const list = document.getElementById("report-list");
+        const hero = document.getElementById("reports-hero");
+        const toolbar = document.getElementById("reports-toolbar");
+
+        list.style.display = 'none';
+        hero.style.display = 'none';
+        toolbar.style.display = 'none';
+
+        const answersHtml = report.answers && report.answers.length > 0
+          ? report.answers.map((ans, idx) => {
+              const eval = ans.evaluation || {};
+              const score = eval.score !== undefined ? eval.score : 'N/A';
+              const scoreClass = typeof score === 'number' ? getScoreClass(score) : '';
+              const transcript = ans.transcript || 'No answer recorded';
+              
+              const verdictClass = eval.verdict === 'Excellent' ? 'score-high' : eval.verdict === 'Good' ? 'score-medium' : eval.verdict === 'Fair' ? 'score-medium' : 'score-low';
+              
+              return `
+                <div class="question-item">
+                  <div class="question-header">
+                    <span class="question-num">Question ${idx + 1}</span>
+                    <span class="question-score ${scoreClass}">${score}/5</span>
+                  </div>
+                  <div class="question-text">${AdminApp.escapeHtml(ans.question_text || 'Question not available')}</div>
+                  <div class="answer-section">
+                    <div class="answer-label">Candidate's Answer</div>
+                    <div class="answer-text">${AdminApp.escapeHtml(transcript)}</div>
+                  </div>
+                  <div class="answer-section" style="margin-top: 12px;">
+                    <div class="answer-label">AI Evaluation</div>
+                    <div style="padding: 12px; background: var(--panel-alt); border-radius: 8px;">
+                      <div style="margin-bottom: 10px;">
+                        <strong>Verdict:</strong> <span class="question-score ${verdictClass}" style="display: inline-block; padding: 2px 10px;">${AdminApp.escapeHtml(eval.verdict || 'N/A')}</span>
+                      </div>
+                      <div style="margin-bottom: 10px;">
+                        <strong>Overview:</strong> ${AdminApp.escapeHtml(eval.overview || 'No overview available')}
+                      </div>
+                      ${eval.correct && eval.correct.length > 0 ? `
+                        <div style="margin-bottom: 8px;">
+                          <strong style="color: #16a34a;">Correct Concepts:</strong>
+                          <ul style="margin: 4px 0 0 20px; font-size: 13px;">
+                            ${eval.correct.map(c => `<li>${AdminApp.escapeHtml(c)}</li>`).join('')}
+                          </ul>
+                        </div>
+                      ` : ''}
+                      ${eval.missed && eval.missed.length > 0 ? `
+                        <div style="margin-bottom: 8px;">
+                          <strong style="color: #dc2626;">Missed Concepts:</strong>
+                          <ul style="margin: 4px 0 0 20px; font-size: 13px;">
+                            ${eval.missed.map(m => `<li>${AdminApp.escapeHtml(m)}</li>`).join('')}
+                          </ul>
+                        </div>
+                      ` : ''}
+                      ${eval.key_concepts && eval.key_concepts.length > 0 ? `
+                        <div style="margin-bottom: 8px;">
+                          <strong>Key Concepts:</strong>
+                          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">
+                            ${eval.key_concepts.map(kc => `
+                              <span style="padding: 3px 10px; border-radius: 12px; font-size: 12px; background: ${kc.hit ? 'rgba(34, 197, 94, 0.15)' : 'rgba(209, 67, 67, 0.15)'}; color: ${kc.hit ? '#16a34a' : '#dc2626'};">
+                                ${AdminApp.escapeHtml(kc.term)} ${kc.hit ? '✓' : '✗'}
+                              </span>
+                            `).join('')}
+                          </div>
+                        </div>
+                      ` : ''}
+                      ${eval.improvement_tip ? `
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; font-size: 13px;">
+                          <strong style="color: #2563eb;">Improvement Tip:</strong> ${AdminApp.escapeHtml(eval.improvement_tip)}
+                        </div>
+                      ` : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')
+          : '<div class="empty">No answers recorded.</div>';
+
+        const flagsHtml = report.flags && report.flags.length > 0
+          ? `<div class="flag-list">${report.flags.map(f => `<span class="flag-item">${AdminApp.escapeHtml(f.event_type.replace('_', ' '))}</span>`).join('')}</div>`
+          : '<div style="color: #16a34a; font-size: 14px;">No flags recorded</div>';
+
+        const videoHtml = report.video_available
+          ? `<div style="margin-top: 16px;">
+              <video controls style="width: 100%; max-width: 640px; border-radius: 8px; background: #000;">
+                <source src="/interview/video/${report.session.id}" type="video/webm" />
+                Your browser does not support video playback.
+              </video>
+            </div>`
+          : '<div style="color: var(--muted); font-size: 13px;">No interview recording available</div>';
+
+        wrap.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <button class="ghost-btn back-btn" onclick="showReportsList()">← Back to Reports</button>
+            <button
+              class="ghost-btn"
+              onclick="deleteReport()"
+              style="color: #dc2626; border-color: rgba(220, 38, 38, 0.25);"
+            >
+              Delete Report
+            </button>
+          </div>
+          <div class="item">
+            <div class="report-header">
+              <div>
+                <div class="chip">${AdminApp.escapeHtml(report.session.status)}</div>
+                <h2 style="margin: 8px 0;">${AdminApp.escapeHtml(report.session.topic)}</h2>
+                <div class="report-meta">
+                  Candidate: ${AdminApp.escapeHtml(report.candidate.name)} (${AdminApp.escapeHtml(report.candidate.email)})<br />
+                  Score: ${report.summary.avg_score}/10 · ${report.summary.questions_answered}/${report.summary.total_questions} answered
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 32px; font-weight: 800; color: ${report.summary.avg_score >= 7 ? '#16a34a' : report.summary.avg_score >= 4 ? '#d97706' : '#dc2626'};">
+                  ${report.summary.avg_score}/10
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top: 20px;">
+            <h3 style="margin-bottom: 12px;">Interview Recording</h3>
+            ${videoHtml}
+          </div>
+          <div style="margin-top: 24px;">
+            <h3 style="margin-bottom: 12px;">Flags (${report.summary.flag_count})</h3>
+            ${flagsHtml}
+          </div>
+          <div style="margin-top: 24px;">
+            <h3 style="margin-bottom: 12px;">Questions & Answers</h3>
+            ${answersHtml}
+          </div>
+        `;
+        wrap.style.display = 'block';
+      } catch (error) {
+        alert('Failed to load report: ' + error.message);
+      }
+    }
+
+    function showReportsList() {
+      activeAssignmentId = '';
+      document.getElementById("report-detail").style.display = 'none';
+      document.getElementById("report-list").style.display = 'block';
+      document.getElementById("reports-hero").style.display = 'block';
+      document.getElementById("reports-toolbar").style.display = 'flex';
+    }
+
+    async function deleteReport() {
+      if (!activeAssignmentId) return;
+      if (!confirm('Delete this report? This cannot be undone.')) return;
+
+      try {
+        await AdminApp.fetchJson(`/admin/reports/${activeAssignmentId}`, { method: 'DELETE' });
+        cachedReports = cachedReports.filter((item) => item.assignment_id !== activeAssignmentId);
+        showReportsList();
+        renderReports();
+      } catch (error) {
+        alert('Failed to delete report: ' + error.message);
+      }
+    }
+
+    function openImageModal(src) {
+      document.getElementById('image-modal').style.display = 'flex';
+      document.getElementById('modal-image').src = src;
+    }
+
+    function closeImageModal() {
+      document.getElementById('image-modal').style.display = 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('image-modal').addEventListener('click', closeImageModal);
+      document.getElementById('modal-close').addEventListener('click', closeImageModal);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeImageModal();
+      });
+    });
+
+    async function deleteAllReports() {
+      if (!confirm('Delete ALL reports and assignments? This cannot be undone.')) return;
+      try {
+        await AdminApp.fetchJson('/admin/assignments/cleanup', { method: 'DELETE' });
+        cachedReports = [];
+        renderReports();
+      } catch (error) {
+        alert('Failed to delete all reports: ' + error.message);
+      }
+    }
+
+    (async () => {
+      await AdminApp.requireAdmin();
+      cachedReports = await AdminApp.fetchJson("/admin/reports");
+      renderReports();
+    })();
+  </script>
+</body>
+</html>

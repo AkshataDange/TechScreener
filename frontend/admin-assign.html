@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Assign Interview - TechScreen Admin</title>
+  <link rel="stylesheet" href="/static/admin-shared.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark">N</div>
+        <h2>Admin</h2>
+        <p id="admin-summary">Admin</p>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="sidebar-link" href="/admin">Dashboard</a>
+        <a class="sidebar-link" href="/admin/users-page">Users</a>
+        <a class="sidebar-link active" href="/admin/assign">Assign</a>
+        <a class="sidebar-link" href="/admin/reports-page">Reports</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="danger-btn" type="button">Logout</button>
+      </div>
+    </aside>
+
+    <main class="content-area">
+      <div class="page-shell">
+        <section class="hero">
+          <div class="eyebrow">Assign</div>
+          <h1>Assign interview</h1>
+        </section>
+
+        <section class="panel" style="margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <div class="chip">Resume Parser</div>
+              <h2 style="margin:6px 0 0 0;">Approved candidates</h2>
+              <p class="muted" style="margin:4px 0 0 0;">HR-approved candidates from the Resume Parser. Fill in any missing emails, then click Assign to create their account and email login credentials.</p>
+            </div>
+            <button id="approved-refresh" class="ghost-btn" type="button">Refresh</button>
+          </div>
+          <div id="approved-list" class="muted">Loading…</div>
+          <div id="approved-message" class="message"></div>
+        </section>
+
+        <section class="panel">
+          <div class="chip">Manual</div>
+          <h2 style="margin:6px 0 12px 0;">Assign manually</h2>
+          <div class="grid two">
+            <div class="stack">
+          <div class="field">
+            <label for="assign-user">Candidate</label>
+            <select id="assign-user"></select>
+          </div>
+
+          <div class="field">
+            <label for="assign-exp">Years of Experience</label>
+            <input id="assign-exp" type="number" min="0" step="0.5" value="2" />
+          </div>
+
+          <div class="field">
+            <label for="assign-jd">Job Description</label>
+            <textarea id="assign-jd" rows="8" placeholder="Paste the job description here"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="assign-resume">Resume</label>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
+              <input id="assign-resume-file" type="file" accept=".pdf,.docx,.txt" />
+              <button id="assign-resume-clear" type="button" class="ghost-btn" style="padding:4px 10px;">Clear</button>
+            </div>
+            <div id="assign-resume-status" class="muted" style="margin-bottom:6px;">Upload a .pdf, .docx, or .txt — or paste text below. The extracted text will appear in the box and remains editable.</div>
+            <textarea id="assign-resume" rows="10" placeholder="Paste the candidate resume here, or upload a file above"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Questions & Time</label>
+            <div class="muted">Chosen automatically by the LLM based on JD, resume, and experience (8-16 questions, 30-60 minutes).</div>
+          </div>
+
+          <button id="assign-btn" class="primary-btn" type="button">Assign Interview</button>
+          <div id="assign-message" class="message"></div>
+            </div>
+
+            <div class="panel">
+              <div class="chip">Selected</div>
+              <p id="selected-user-copy">No user selected.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/admin-common.js"></script>
+  <script>
+    let loadedUsers = [];
+
+    async function loadUsers() {
+      loadedUsers = await AdminApp.fetchJson("/admin/users");
+      const select = document.getElementById("assign-user");
+      const requestedUserId = AdminApp.getQueryParam("user_id");
+      if (!loadedUsers.length) {
+        select.innerHTML = '<option value="">No users available</option>';
+        return;
+      }
+
+      select.innerHTML = loadedUsers.map((user) => {
+        const selected = user.id === requestedUserId ? "selected" : "";
+        return `<option value="${AdminApp.escapeHtml(user.id)}" ${selected}>${AdminApp.escapeHtml(user.name)} (${AdminApp.escapeHtml(user.email)})</option>`;
+      }).join("");
+      updateSelectedUserCopy();
+    }
+
+    function updateSelectedUserCopy() {
+      const selectedUser = loadedUsers.find((user) => user.id === document.getElementById("assign-user").value);
+      const copy = document.getElementById("selected-user-copy");
+      if (!selectedUser) {
+        copy.textContent = "No user selected.";
+        return;
+      }
+        copy.textContent = `${selectedUser.name} (${selectedUser.email})`;
+    }
+
+    async function createAssignment() {
+      AdminApp.clearMessage("assign-message");
+      const userId = document.getElementById("assign-user").value;
+      if (!userId) {
+        AdminApp.setMessage("assign-message", "No user available to assign.");
+        return;
+      }
+      if (!document.getElementById("assign-jd").value.trim()) {
+        AdminApp.setMessage("assign-message", "Please add a job description.");
+        return;
+      }
+      if (!document.getElementById("assign-resume").value.trim()) {
+        AdminApp.setMessage("assign-message", "Please add the candidate resume.");
+        return;
+      }
+
+      const button = document.getElementById("assign-btn");
+      button.disabled = true;
+      try {
+        const data = await AdminApp.fetchJson("/admin/assignments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            job_description: document.getElementById("assign-jd").value.trim(),
+            resume_text: document.getElementById("assign-resume").value.trim(),
+            years_of_experience: Number(document.getElementById("assign-exp").value || 0)
+          })
+        });
+        const qCount = data.target_question_count != null ? `${data.target_question_count} questions` : "8–16 questions";
+        const tMins = data.recommended_interview_time_minutes != null ? `${data.recommended_interview_time_minutes} min` : "30–60 min";
+        AdminApp.setMessage("assign-message", `Assigned "${data.interview_title}" to ${data.user_name} — ${qCount} · ${tMins}.`, "success");
+      } catch (error) {
+        AdminApp.setMessage("assign-message", error.message);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function handleResumeFile(event) {
+      const input = event.target;
+      const file = input.files && input.files[0];
+      const statusEl = document.getElementById("assign-resume-status");
+      const textarea = document.getElementById("assign-resume");
+      AdminApp.clearMessage("assign-message");
+      if (!file) return;
+
+      statusEl.textContent = `Extracting text from ${file.name}…`;
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const data = await AdminApp.fetchJson("/admin/parse-resume", {
+          method: "POST",
+          body: formData,
+        });
+        textarea.value = data.text || "";
+        statusEl.textContent = `Loaded ${data.filename} — ${data.char_count.toLocaleString()} characters extracted. Edit below if needed.`;
+      } catch (error) {
+        statusEl.textContent = `Could not extract text: ${error.message}`;
+        input.value = "";
+      }
+    }
+
+    function clearResumeFile() {
+      document.getElementById("assign-resume-file").value = "";
+      document.getElementById("assign-resume").value = "";
+      document.getElementById("assign-resume-status").textContent =
+        "Upload a .pdf, .docx, or .txt — or paste text below. The extracted text will appear in the box and remains editable.";
+    }
+
+    function renderApprovedCandidates(items) {
+      const container = document.getElementById("approved-list");
+      if (!items || !items.length) {
+        container.innerHTML = '<div class="muted">No approved candidates yet.</div>';
+        return;
+      }
+
+      const rows = items.map((c) => {
+        const id = AdminApp.escapeHtml(c.candidate_id);
+        const name = AdminApp.escapeHtml(c.candidate_name || "Unnamed");
+        const jd = AdminApp.escapeHtml(c.jd_title || "—");
+        const score = c.score != null ? Number(c.score).toFixed(2) : "—";
+        const file = AdminApp.escapeHtml(c.resume_filename || "—");
+        const approver = AdminApp.escapeHtml(c.approved_by || "—");
+        const emailMissing = !c.email;
+        const ready = c.is_ready && !!c.email;
+        const flag = emailMissing
+          ? '<span style="color:#c62828; font-weight:600;">⚠ Missing email</span>'
+          : (ready ? '<span style="color:#2e7d32;">Ready</span>' : '<span class="muted">Not ready</span>');
+
+        const emailCell = emailMissing
+          ? `<input type="email" data-candidate="${id}" class="approved-email-input" placeholder="candidate@email.com" style="padding:4px 6px; min-width:200px;" />
+             <button class="ghost-btn approved-save-email" data-candidate="${id}" type="button" style="padding:4px 10px; margin-left:4px;">Save</button>`
+          : `${AdminApp.escapeHtml(c.email)}`;
+
+        const assignBtn = ready
+          ? `<button class="primary-btn approved-assign-btn" data-candidate="${id}" type="button" style="padding:6px 14px;">Assign Interview</button>`
+          : `<button class="primary-btn" type="button" disabled style="padding:6px 14px; opacity:0.5;">Assign Interview</button>`;
+
+        return `
+          <tr>
+            <td>${name}</td>
+            <td>${jd}</td>
+            <td>${score}</td>
+            <td>${file}</td>
+            <td>${approver}</td>
+            <td>${emailCell}</td>
+            <td>${flag}</td>
+            <td style="text-align:right;">${assignBtn}</td>
+          </tr>
+        `;
+      }).join("");
+
+      container.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:14px;">
+            <thead>
+              <tr style="text-align:left; border-bottom:1px solid #ddd;">
+                <th style="padding:8px;">Candidate</th>
+                <th style="padding:8px;">JD</th>
+                <th style="padding:8px;">Score</th>
+                <th style="padding:8px;">Resume file</th>
+                <th style="padding:8px;">Approved by</th>
+                <th style="padding:8px;">Email</th>
+                <th style="padding:8px;">Status</th>
+                <th style="padding:8px; text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+
+      container.querySelectorAll(".approved-save-email").forEach((btn) => {
+        btn.addEventListener("click", () => saveCandidateEmail(btn.dataset.candidate));
+      });
+      container.querySelectorAll(".approved-assign-btn").forEach((btn) => {
+        btn.addEventListener("click", () => assignApprovedCandidate(btn.dataset.candidate, btn));
+      });
+    }
+
+    async function loadApprovedCandidates() {
+      const container = document.getElementById("approved-list");
+      container.innerHTML = '<div class="muted">Loading…</div>';
+      AdminApp.clearMessage("approved-message");
+      try {
+        const items = await AdminApp.fetchJson("/admin/approved-candidates");
+        renderApprovedCandidates(items);
+      } catch (error) {
+        container.innerHTML = "";
+        AdminApp.setMessage("approved-message", error.message);
+      }
+    }
+
+    async function saveCandidateEmail(candidateId) {
+      const input = document.querySelector(`.approved-email-input[data-candidate="${CSS.escape(candidateId)}"]`);
+      if (!input) return;
+      const email = input.value.trim();
+      if (!email) {
+        AdminApp.setMessage("approved-message", "Please enter an email address.");
+        return;
+      }
+      AdminApp.clearMessage("approved-message");
+      try {
+        await AdminApp.fetchJson(`/admin/approved-candidates/${encodeURIComponent(candidateId)}/email`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        AdminApp.setMessage("approved-message", "Email saved.", "success");
+        await loadApprovedCandidates();
+      } catch (error) {
+        AdminApp.setMessage("approved-message", error.message);
+      }
+    }
+
+    async function assignApprovedCandidate(candidateId, button) {
+      AdminApp.clearMessage("approved-message");
+      if (!confirm("Create account and send credentials email to this candidate?")) return;
+      button.disabled = true;
+      try {
+        const data = await AdminApp.fetchJson(`/admin/approved-candidates/${encodeURIComponent(candidateId)}/assign`, {
+          method: "POST",
+        });
+        const qCount = data.target_question_count != null ? `${data.target_question_count} questions` : "8–16 questions";
+        const tMins = data.recommended_interview_time_minutes != null ? `${data.recommended_interview_time_minutes} min` : "30–60 min";
+        const planLine = ` Plan: ${qCount} · ${tMins}.`;
+        AdminApp.setMessage(
+          "approved-message",
+          (data.message || "Assignment created.") + planLine,
+          data.email_sent ? "success" : "error"
+        );
+        await Promise.all([loadApprovedCandidates(), loadUsers()]);
+      } catch (error) {
+        AdminApp.setMessage("approved-message", error.message);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.getElementById("assign-user").addEventListener("change", updateSelectedUserCopy);
+    document.getElementById("assign-btn").addEventListener("click", createAssignment);
+    document.getElementById("assign-resume-file").addEventListener("change", handleResumeFile);
+    document.getElementById("assign-resume-clear").addEventListener("click", clearResumeFile);
+    document.getElementById("approved-refresh").addEventListener("click", loadApprovedCandidates);
+
+    (async () => {
+      await AdminApp.requireAdmin();
+      await loadUsers();
+      await loadApprovedCandidates();
+    })();
+  </script>
+</body>
+</html>

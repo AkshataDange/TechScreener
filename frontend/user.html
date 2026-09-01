@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Portal - TechScreen AI</title>
+  <link rel="stylesheet" href="/static/admin-shared.css" />
+  <style>
+    #auth-page { display: none; }
+    #auth-page.active { display: block; }
+  </style>
+</head>
+<body style="visibility: hidden;" class="loading">
+  <div id="auth-page" class="login-wrap page active">
+    <div class="login-card">
+      <div class="badge">U</div>
+      <h1 id="title">User Login</h1>
+      <p id="subtitle" class="muted">Enter your email and password to continue.</p>
+
+      <div id="name-field" class="field" style="display:none;">
+        <label for="name">Full Name</label>
+        <input id="name" type="text" placeholder="Enter your full name" />
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="name@example.com" required />
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Enter your password" required />
+      </div>
+
+      <button id="submit-btn" class="primary-btn" style="width:100%;display:block;" onclick="submitAuth()">Login</button>
+      <div id="message" class="message"></div>
+      <div id="switch-line" class="muted" style="text-align: center; margin-top: 16px; font-size: 14px;">
+        New here? <a onclick="setMode('signup')" style="color: var(--primary); font-weight: 700; cursor: pointer;">Create an account</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard is injected here only after successful authentication -->
+  <div id="dashboard-container"></div>
+
+  <script>
+    const API = '';
+    const TOKEN_KEY = 'techscreen_user_token';
+    let mode = 'login';
+    let authToken = localStorage.getItem(TOKEN_KEY) || '';
+    let currentUser = null;
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      const title = document.getElementById('title');
+      const subtitle = document.getElementById('subtitle');
+      const nameField = document.getElementById('name-field');
+      const submitBtn = document.getElementById('submit-btn');
+      const switchLine = document.getElementById('switch-line');
+
+      if (mode === 'login') {
+        title.textContent = 'User Login';
+        subtitle.textContent = 'Enter your email and password to continue.';
+        nameField.style.display = 'none';
+        submitBtn.textContent = 'Login';
+        switchLine.innerHTML = 'New here? <a id="switch-link" style="color: var(--primary); font-weight: 700; cursor: pointer;">Create an account</a>';
+      } else {
+        title.textContent = 'Create Account';
+        subtitle.textContent = 'Create your account to get started.';
+        nameField.style.display = 'grid';
+        submitBtn.textContent = 'Create Account';
+        switchLine.innerHTML = 'Already have an account? <a id="switch-link" style="color: var(--primary); font-weight: 700; cursor: pointer;">Login</a>';
+      }
+      document.getElementById('switch-link').addEventListener('click', () => setMode(mode === 'login' ? 'signup' : 'login'));
+      setMessage('');
+    }
+
+    const DASHBOARD_HTML = '<div id="dashboard-page" class="app-shell page" style="display: grid; grid-template-columns: 260px 1fr;">' +
+  '<aside class="sidebar">' +
+    '<div class="sidebar-brand">' +
+      '<div class="sidebar-mark">U</div>' +
+      '<h2>User Portal</h2>' +
+      '<p id="user-summary">Guest</p>' +
+    '</div>' +
+    '<div class="sidebar-footer">' +
+      '<button id="logout-btn" class="danger-btn" type="button" onclick="logout()">Logout</button>' +
+    '</div>' +
+  '</aside>' +
+
+  '<main class="content-area">' +
+    '<div class="page-shell">' +
+      '<section class="hero">' +
+        '<div class="eyebrow">Dashboard</div>' +
+        '<h1>My Interviews</h1>' +
+        '<p id="welcome">Welcome back.</p>' +
+      '</section>' +
+
+      '<section class="grid two" style="margin-bottom: 20px;">' +
+        '<div class="panel">' +
+          '<div class="chip">Account</div>' +
+          '<p class="muted" id="account-copy">Sign in to see your assignments.</p>' +
+        '</div>' +
+        '<div class="panel">' +
+          '<div class="chip">Status</div>' +
+          '<p class="muted">Your assigned interviews will appear here once the admin assigns them.</p>' +
+        '</div>' +
+      '</section>' +
+
+      '<section class="panel">' +
+        '<div class="section-label">Assigned Interviews</div>' +
+        '<div id="assignment-list" class="stack"></div>' +
+      '</section>' +
+    '</div>' +
+  '</main>' +
+'</div>';
+
+    function showPage(pageId) {
+      document.querySelectorAll('.page.active').forEach((page) => page.classList.remove('active'));
+      const page = document.getElementById(pageId);
+      if (!page && pageId === 'dashboard-page') {
+        const container = document.getElementById('dashboard-container');
+        container.innerHTML = DASHBOARD_HTML;
+        const newPage = document.getElementById('dashboard-page');
+        newPage.classList.add('active');
+      } else if (page) {
+        page.classList.add('active');
+      }
+      document.body.classList.toggle('auth-active', pageId === 'auth-page');
+      if (pageId === 'dashboard-page') {
+        document.body.style.visibility = 'visible';
+      }
+    }
+
+    function setMessage(text = '', type = '') {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = type ? `message ${type}` : 'message';
+    }
+
+    function authHeaders() {
+      return { 'Authorization': `Bearer ${authToken}` };
+    }
+
+    async function readJsonResponse(res) {
+      const raw = await res.text();
+      if (!raw) return {};
+      try {
+        return JSON.parse(raw);
+      } catch (_error) {
+        if (!res.ok) {
+          throw new Error(raw.trim() || 'Request failed');
+        }
+        throw new Error('Server returned an invalid JSON response.');
+      }
+    }
+
+    async function submitAuth() {
+      console.log('submitAuth called');
+      setMessage('');
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const name = document.getElementById('name').value.trim();
+
+      if (!email || !password || (mode === 'signup' && !name)) {
+        setMessage('Please fill in all required fields.', 'error');
+        return;
+      }
+
+      const button = document.getElementById('submit-btn');
+      button.disabled = true;
+
+      try {
+        const endpoint = mode === 'signup' ? '/auth/register' : '/auth/login';
+        const payload = mode === 'signup' ? { name, email, password } : { email, password };
+        const res = await fetch(`${API}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await readJsonResponse(res);
+
+        if (!res.ok) {
+          throw new Error(data.detail || 'Authentication failed');
+        }
+
+        authToken = data.token || data.access_token;
+        currentUser = data.user;
+        localStorage.setItem(TOKEN_KEY, authToken);
+        showPage('dashboard-page');
+        loadAssignments();
+        updateDashboardUser();
+      } catch (error) {
+        setMessage(error.message, 'error');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function bootstrap() {
+      console.log('bootstrap running, token:', authToken ? 'yes' : 'no');
+      if (!authToken) {
+        setMode('login');
+        showPage('auth-page');
+        document.body.style.visibility = 'visible';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+        console.log('/auth/me status:', res.status);
+        if (!res.ok) {
+          console.log('auth/me failed, calling logout');
+          logout();
+          return;
+        }
+        const data = await readJsonResponse(res);
+        currentUser = data;
+        showPage('dashboard-page');
+        loadAssignments().catch(e => console.log('loadAssignments error:', e.message));
+        updateDashboardUser();
+      } catch (err) {
+        console.log('bootstrap error:', err.message);
+        logout();
+      }
+    }
+
+    function updateDashboardUser() {
+      document.getElementById('user-summary').textContent = currentUser?.name || 'Guest';
+      document.getElementById('account-copy').textContent = currentUser ? `Signed in as ${currentUser.name}.` : 'Sign in to see your assignments.';
+      document.getElementById('welcome').textContent = currentUser ? `Welcome back, ${currentUser.name}.` : 'Welcome back.';
+    }
+
+    async function loadAssignments() {
+      try {
+        const res = await fetch(`${API}/user/assignments`, { headers: authHeaders() });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.detail || 'Failed to load assignments');
+        renderAssignments(data);
+      } catch (error) {
+        console.error(error);
+        document.getElementById('assignment-list').innerHTML = '<div class="panel"><div class="empty">Unable to load assignments right now.</div></div>';
+      }
+    }
+
+    function renderAssignments(assignments) {
+      const wrap = document.getElementById('assignment-list');
+      if (!assignments.length) {
+        wrap.innerHTML = '<div class="panel"><div class="empty">No interviews have been assigned to your account yet.</div></div>';
+        return;
+      }
+
+      wrap.innerHTML = assignments.map((item) => {
+        const canStart = item.status === 'assigned' || item.status === 'in_progress';
+        let label = 'Start Interview';
+        if (item.status === 'in_progress') label = 'Resume Interview';
+        if (item.status === 'completed') label = 'Completed';
+        if (item.status === 'expired') label = 'Expired';
+        return `
+          <div class="panel">
+            <div class="grid two" style="align-items: center; gap: 12px; margin-bottom: 18px;">
+              <div>
+                <div class="chip">${item.interview_title}</div>
+                <div class="muted" style="margin-top: 8px;">${item.target_question_count != null ? item.target_question_count + ' questions' : '8–16 questions'} · ${item.recommended_interview_time_minutes != null ? item.recommended_interview_time_minutes + ' minutes' : '30–60 minutes'}${item.years_of_experience != null ? ` · ${item.years_of_experience} yrs exp` : ''}</div>
+              </div>
+              <div class="status">${item.status.replace('_', ' ')}</div>
+            </div>
+            ${canStart ? `<button class="primary-btn" style="width: auto;" onclick="startAssignment('${item.id}')">${label}</button>` : `<button class="primary-btn" style="width: auto;" disabled>${label}</button>`}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function startAssignment(assignmentId) {
+      try {
+        const res = await fetch(`${API}/user/assignments/${assignmentId}/start`, {
+          method: 'POST',
+          headers: authHeaders(),
+        });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.detail || 'Failed to start interview');
+        const startedAtMs = data.started_at ? Date.parse(data.started_at) : NaN;
+        sessionStorage.setItem('pending_session', JSON.stringify({
+          assignment_id: assignmentId,
+          session_id: data.session_id,
+          interview_title: data.interview_title,
+          questions: [data.first_question],
+          num_questions: data.target_question_count,
+          interview_time_limit_minutes: data.recommended_interview_time_minutes,
+          curIdx: 0,
+          status: data.status,
+          sessionStart: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
+        }));
+        window.location.href = `/practice`;
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    function logout() {
+      authToken = '';
+      currentUser = null;
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem('pending_session');
+      const dashContainer = document.getElementById('dashboard-container');
+      if (dashContainer) dashContainer.innerHTML = '';
+      setMode('login');
+      showPage('auth-page');
+      history.replaceState(null, '', '/user');
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
